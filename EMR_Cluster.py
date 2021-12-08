@@ -41,7 +41,27 @@ def run_cluster(aws_access_key_id, aws_secret_access_key, aws_session_token):
                 aws_secret_access_key + ' --key3 '+ aws_session_token,
             'script_file_name' : script_file_name
     }
-    steps = [install_step, convert_step, cluster_step]
+    script_file_name = 'time_series_conversion.py'
+    script_key = f'scripts/{script_file_name}'
+    time_series_conversion_step = {
+            'name': 'time_series_conversion',
+            'script_uri': f's3://{bucket_name}/{script_key}',
+            'script_args':
+                '--key1 '+ aws_access_key_id + ' --key2 '+
+                aws_secret_access_key + ' --key3 '+ aws_session_token,
+            'script_file_name' : script_file_name
+    }
+    script_file_name = 'time_series_analysis.py'
+    script_key = f'scripts/{script_file_name}'
+    time_series_analysis_step = {
+            'name': 'time_series_analysis',
+            'script_uri': f's3://{bucket_name}/{script_key}',
+            'script_args':
+                '--key1 '+ aws_access_key_id + ' --key2 '+
+                aws_secret_access_key + ' --key3 '+ aws_session_token,
+            'script_file_name' : script_file_name
+    }
+    steps = [install_step, convert_step, cluster_step, time_series_conversion_step, time_series_analysis_step]
 
     cluster_id = client.run_job_flow(
         Name='ETL_emr_job_boto3',
