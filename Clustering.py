@@ -389,6 +389,18 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     Year_Index_Silhouette_.rename(columns={0:'Sil_score'}, inplace=True)
 
     # Guardar los archivos en S3
+    # Guardar los archivos en S3
+    for k in range(2000,2021):
+        k_year = str(k)
+        route = './'
+        file_name = 'd_years '+k_year+'.csv'
+        d_years[k].to_csv(route + file_name)
+        s3_client.upload_file(route + file_name, bucket, 'refined/clustering/d_years/{}'.format(file_name))
+        
+        route = './'
+        file_name = 't_scale_df '+ k_year+'.csv'
+        t_scale_df[k].to_csv(route + file_name)
+        s3_client.upload_file(route + file_name, bucket, 'refined/clustering/t_scale/{}'.format(file_name))
     route = './'
     file_name = 'Year_Index_Cluster_km_.csv'
     Year_Index_Cluster_km_.to_csv(route + file_name)
