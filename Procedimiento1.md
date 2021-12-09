@@ -7,9 +7,9 @@ Procedimiento 4: Visualización y presentación de los resultados en Power BI.
 
 Como el nombre del archivo sugiere, este pretende explicar el procedimiento que se debe seguir para reproducir los resultados:
 
-Para este paso debe cerciorarse que tiene acceso al bucket en S3 llamado 'pi-alo-2021-2' o cambiar todas las variables "bucket" por el bucket a usar. El bucket debe tener otras tres zonas "raw", "trusted", "refined" y "logs" que esta ultima es usada para almacenar los registros de corrida de los clusters.
+Para este paso debe cerciorarse que tiene acceso al bucket en S3 llamado 'pi-alo-2021-2' o cambiar todas las variables "bucket" por el bucket a usar. El bucket debe tener otras cuatro zonas "raw", "trusted", "refined" y "logs" que esta última es usada para almacenar los registros de corrida de los clusters.
 
-Dentro del bucket, la carpeta scripts debe contener los archivos "extract_files.py",  "raw_to_trusted.py" y "install_libraries.sh"
+Dentro del bucket, la carpeta scripts debe contener los archivos "extract_files.py",  "raw_to_trusted.py" e "install_libraries.sh"
 
 install_libraries.sh: 
 
