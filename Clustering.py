@@ -83,6 +83,7 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
 
     d_years = {}
     index_data_2.drop(columns=['Date'],inplace=True)
+    index_data_2 = index_data_2[index_data_2.index.year >= 2000]
     for y in range(2000, 2021):
         r = []
         for _ in index_data_2.Index.unique():
@@ -388,15 +389,26 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     Year_Index_Silhouette_= df2.dic.apply(pd.Series)
     Year_Index_Silhouette_.rename(columns={0:'Sil_score'}, inplace=True)
 
+    # (iv) Indicador Silhouette para Spectral Clustering
+    sil_score_sc = {}
+    label_sc = {}
+    for k in d_years.keys():
+        label_sc[k] = y_pred_sc[k]
+        sil_score_sc[k] = silhouette_score(t_scale_df[k], label_sc[k]).round(4)
+    df2= pd.DataFrame({'year':d_years.keys, 'dic':sil_score_sc})        
+    Year_Index_Silhouette_sc_= df2.dic.apply(pd.Series)
+    Year_Index_Silhouette_sc_.rename(columns={0:'Sil_score'}, inplace=True)
+    route = './'
+    Year_Index_Silhouette_sc_.to_csv(route + 'Year_Index_Silhouette_sc_.csv')
+    s3_client.upload_file(route + file_name, bucket, 'refined/clustering/{}'.format(file_name))
+
     # Guardar los archivos en S3
     for k in range(2000,2021):
         k_year = str(k)
-        route = './'
         file_name = 'd_years '+k_year+'.csv'
         d_years[k].to_csv(route + file_name)
         s3_client.upload_file(route + file_name, bucket, 'refined/clustering/d_years/{}'.format(file_name))
         
-        route = './'
         file_name = 't_scale_df '+ k_year+'.csv'
         t_scale_df[k].to_csv(route + file_name)
         s3_client.upload_file(route + file_name, bucket, 'refined/clustering/t_scale/{}'.format(file_name))
@@ -411,7 +423,8 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     
     file_name = 'Year_Index_Silhouette_.csv'
     Year_Index_Silhouette_.to_csv(route + file_name)
-    s3_client.upload_file(route + file_name, bucket, 'refined/clustering/{}'.format(file_name))   
+    s3_client.upload_file(route + file_name, bucket, 'refined/clustering/{}'.format(file_name)) 
+  
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='List the three keys')
     parser.add_argument(
