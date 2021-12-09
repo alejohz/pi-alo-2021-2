@@ -21,7 +21,7 @@ import boto3
 import argparse
 
 def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_token):
-        bucket = "pi-alo-2021-2"
+    bucket = "pi-alo-2021-2"
     #d = datetime.strftime(datetime.today(), format='%d%m%Y') 
     d = datetime.strftime(datetime.today() - timedelta(days=1), format='%d%m%Y') 
 
@@ -507,4 +507,5 @@ if __name__ == "__main__":
         '--key3', default=None, type=str,
         help="AWS access sesion key id.")
     args = parser.parse_args()
+
 Stats_basic_Clust(args.key1,args.key2,args.key3)
