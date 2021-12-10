@@ -22,7 +22,7 @@ import argparse
 
 def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_token):
     bucket = "pi-alo-2021-2"
-    d = datetime.strftime(datetime.today() - timedelta(days=1), format='%d%m%Y') 
+    d = datetime.strftime(datetime.today(), format='%d%m%Y') 
     #d = datetime.strftime(datetime.today() + timedelta(days=1), format='%d%m%Y') 
 
     # (0.1) Acceder al bucket de S3 con las session keys
