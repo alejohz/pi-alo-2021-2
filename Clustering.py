@@ -22,8 +22,8 @@ import argparse
 
 def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_token):
     bucket = "pi-alo-2021-2"
-    #d = datetime.strftime(datetime.today(), format='%d%m%Y') 
     d = datetime.strftime(datetime.today() - timedelta(days=1), format='%d%m%Y') 
+    #d = datetime.strftime(datetime.today() + timedelta(days=1), format='%d%m%Y') 
 
     # (0.1) Acceder al bucket de S3 con las session keys
     s3_client = boto3.client('s3', region_name='us-east-1',
@@ -87,39 +87,33 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     for y in range(2000, 2021):
         r = []
         for _ in index_data_2.Index.unique():
-            t = [_] + list(index_data_2[index_data_2['Index'] == _].resample('Y').median().values[y - 2000])
-            
-            c = index_data_2.columns.tolist()
-            c = ['Index']+ c[:-1]            
-            df = pd.DataFrame(data=t).transpose()
-            df.columns = c
-            r.append(df)
+            #t = [_] + list(index_data_2[index_data_2['Index'] == _].resample('Y').median())
+            t = index_data_2[index_data_2['Index'] == _].resample('Y').median()
+            t['Index'] = _
+            t = t[t.index.year == y]
+            r.append(t)
+
         _ = pd.concat((r)).merge(index_info[['Region', 'Index']], on='Index')
         _['Inflation_rate'] = inflation.loc[y][_.Region].values
         _['GDP'] = gdp.loc[y][_.Region].values
         _['Pop.Gth.Rate'] = popu.loc[y][_.Region].values
         _.drop(columns=['Region'], inplace=True)
         _ = _.merge(dif_rate[dif_rate['Date'].dt.year == y][['Index', 'percentage']], on='Index')
+        _.set_index('Index', drop=True, inplace=True)
         d_years[y] = _
+     
 
     # (2) Diccionario de Arrays para cada año con datos normalizados
     t_scale = {}
     for k in d_years.keys():
-        _ = d_years[k].iloc[:,0]
-        t_scale[k] = StandardScaler().fit_transform(d_years[k].iloc[:,1:])
+        t_scale[k] = StandardScaler().fit_transform(d_years[k])
         #break
-    
-    #print('t_scale_2000',t_scale[2000].round(2))
-
     # (3) Diccionario de Dataframes para cada año con datos normalizados
     t_scale_df ={}
     for k in d_years.keys():
-        t_scale_df[k] = pd.DataFrame(t_scale[k],columns=['Open','High','Low','Close','Adj Close','Volume','Infl_GR','GDP_GR','Popl_GR','Percentage'])
-        t_scale_df[k].index= list(index_data_2['Index'].unique())
-    
-    #print(list(index_data_2['Index'].unique()))
-    #print('t_scale_df_2000',t_scale_df[2000].round(2))
-    
+        t_scale_df[k] = pd.DataFrame(t_scale[k], columns=d_years[k].columns)
+        t_scale_df[k].index= d_years[k].index
+  
     # (4) Plotmatrix de una año en particular:
     """ k = 2000
     pd.plotting.scatter_matrix(t_scale_df[k])
@@ -145,10 +139,7 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     for k in d_years.keys():
         Corr_global[k] = t_scale_df[k].corr()
         Dep_global[k] = (1 - (np.linalg.det(t_scale_df[k].corr())**(1/(n-1)))).round(4)
-    
-    #print(Corr_global[2000])
-    #print(Dep_global[2000])
-    
+
     # (8) Regresion lineal con scikit learn y OLS
 
     X = {}
@@ -166,7 +157,7 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     r2 = {}
     results = {}
     for k in d_years.keys():
-        X[k] = np.array(t_scale_df[k][['Volume','Infl_GR','GDP_GR','Popl_GR','Percentage']])
+        X[k] = np.array(t_scale_df[k][['Volume','Inflation_rate','GDP','Pop.Gth.Rate','percentage']])
         Y[k] = np.array(t_scale_df[k][['Adj Close']])
         # Regression with scikit learn
         reg[k] = LinearRegression().fit(X[k], Y[k])
@@ -222,29 +213,19 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     for k in d_years.keys():
         C[k] = np.array(t_scale_df[k].cov())
         [W[k],V[k]] = np.linalg.eig(C[k])
-        AuVec0[k] = (1*(V[k][:,0])).reshape(6,1)
-        AuVec1[k] = (1*(V[k][:,1])).reshape(6,1)
-        AuVec2[k] = (1*(V[k][:,2])).reshape(6,1)
+        AuVec0[k] = ((V[k][:,0])).reshape(6,1)
+        AuVec1[k] = ((V[k][:,1])).reshape(6,1)
+        AuVec2[k] = ((V[k][:,2])).reshape(6,1)
         t_scale[k] = np.array(t_scale_df[k])
         Z1[k] = (t_scale[k] @ AuVec0[k]).round(3)
         Z2[k] = (t_scale[k] @ AuVec1[k]).round(3)
         Z3[k] = (t_scale[k] @ AuVec2[k]).round(3)
-    
-    #print(C[2000])
-    #print(W[2000])
-    #print(V[2000])
-    #print('AuVec0_2000')
-    #print(AuVec0[2000].round(2))
-    #print('AuVec1_2000')
-    #print(AuVec1[2000].round(2))
-    #print('AuVec2_2000')
-    #print(AuVec2[2000].round(2))
-       
+        
     # (10) Clustering con Kmeans
     from sklearn.cluster import KMeans
     from sklearn.preprocessing import MinMaxScaler
 
-    km = KMeans(n_clusters=5,random_state=42)
+    km = KMeans(n_clusters=5)
 
     y_pred = {}
     Z_comp = {}
@@ -256,13 +237,13 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     Z_comp_df_4 = {}
     #Z_comp_df_5 = {}
     for k in d_years.keys():
-        y_pred[k] = km.fit_predict(t_scale_df[k][['Adj Close','Volume','Infl_GR','GDP_GR','Popl_GR','Percentage']])
+        y_pred[k] = km.fit_predict(t_scale_df[k][['Adj Close','Volume','Inflation_rate','GDP','Pop.Gth.Rate','percentage']])
         Z_comp[k] = np.array([Z1[k],Z2[k]])
         Z_comp[k] = Z_comp[k].T.reshape(12,2)
         Z_comp_df[k] = pd.DataFrame(Z_comp[k])
         Z_comp_df[k]['cluster'] = y_pred[k]  
         Z_comp_df[k] = Z_comp_df[k].rename(columns={0:'Z1',1:'Z2'})
-        Z_comp_df[k].index= list(index_data_2['Index'].unique()) #['NYA_US', 'IXIC_US','HSI_HK','000001.SS_CN', 'GSPTSE_CA', '399001.SZ_CN', 'GDAXI_EU', 'KS11_KR', 'SSMI_Swiss', 'TWII_TW','N225_JP', 'N100_EU']
+        Z_comp_df[k].index= d_years[k].index
         # Grafica de clusters con labels
         Z_comp_df_0[k] = Z_comp_df[k][Z_comp_df[k].cluster == 0]
         Z_comp_df_1[k] = Z_comp_df[k][Z_comp_df[k].cluster == 1]
@@ -270,12 +251,9 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
         Z_comp_df_3[k] = Z_comp_df[k][Z_comp_df[k].cluster == 3]
         Z_comp_df_4[k] = Z_comp_df[k][Z_comp_df[k].cluster == 4]
         #Z_comp_df_5[k] = Z_comp_df[k][Z_comp_df[k].cluster == 5]
-    
-    #print('Z_comp_df_2000')
-    #print(Z_comp_df[2000])
         
     # plotting
-    """ plt.plot(Z_comp_df_0[k]['Z1'], Z_comp_df_0[k]['Z2'],'o', color='green')
+        """ plt.plot(Z_comp_df_0[k]['Z1'], Z_comp_df_0[k]['Z2'],'o', color='green')
         plt.plot(Z_comp_df_1[k]['Z1'], Z_comp_df_1[k]['Z2'],'o', color='blue')
         plt.plot(Z_comp_df_2[k]['Z1'], Z_comp_df_2[k]['Z2'],'o', color='red')
         plt.plot(Z_comp_df_3[k]['Z1'], Z_comp_df_3[k]['Z2'],'o', color='purple')
@@ -309,32 +287,14 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
 
 
     # (11) Spectral Clustering
-    rbf_param = 7.6 # lambda hyperparameter used in the exponential equation of the distance
 
     Z_comp_spec_df = {}
-    K_exp = {}
-    D_exp = {}
-    D_inv_sr = {}
-    M_exp = {}
-    U = {}
-    Sigma = {}
-    _ = {}
-    Usubset = {}
-    y_pred_sc = {}
-    for k in d_years.keys():
-        Z_comp_spec_df[k]= Z_comp_df[k][['Z1', 'Z2']]
-        K_exp[k] = (np.exp(-rbf_param*distance.cdist(Z_comp_spec_df[k],Z_comp_spec_df[k],metric='sqeuclidean')))
-        D_exp[k] = K_exp[k].sum(axis = 1) 
-        D_inv_sr[k] = np.sqrt(1/D_exp[k])
-        M_exp[k] = np.multiply(D_inv_sr[k][np.newaxis,:],np.multiply(K_exp[k],D_inv_sr[k][:,np.newaxis]))
-        U[k], Sigma[k], _[k] = linalg.svd(M_exp[k], full_matrices = False, lapack_driver = 'gesvd')
-        Usubset[k] = U[k][:,0:5]
-        y_pred_sc[k] = KMeans(n_clusters=5, random_state = 42).fit_predict(normalize(Usubset[k]))
-        y_pred_sc[k] = y_pred_sc[k].reshape(12,1)
-        Z_comp_spec_df[k] = pd.DataFrame(Z_comp_spec_df[k])
-        Z_comp_spec_df[k]['cluster'] = y_pred_sc[k]
-        Z_comp_spec_df[k].index= list(index_data_2['Index'].unique())
-        
+    from sklearn.cluster import SpectralClustering
+    for k in t_scale_df.keys():
+        Z_comp_spec_df[k] = pd.DataFrame(SpectralClustering(n_clusters = 5).fit_predict(t_scale_df[k]), index=t_scale_df[k].index,
+            columns=['cluster'])
+        Z_comp_spec_df[k][['Z1', 'Z2']] = Z_comp_df[k][['Z1', 'Z2']]
+
         """ plt.figure(figsize = (8,4))
         plt.subplot(121)
         plt.scatter(Z_comp_spec_df[k][['Z1']],Z_comp_spec_df[k][['Z2']],s=20)
@@ -345,8 +305,7 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
         plt.title('Labels returned by Spectral Clustering')
         print('Año ',k,' :')
         plt.show()' """
-    #print(Z_comp_spec_df[2000])
-    
+
     #(12) Clusters: 3D Plotting
     x_Z1 = {}
     y_Z2 = {}
@@ -361,7 +320,7 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
         x_Z1[k] = Z1[k].reshape(12,)
         y_Z2[k] = Z2[k].reshape(12,)
         z_Z3[k] = Z3[k].reshape(12,)
-        y_pred_3D[k] = y_pred_sc[k].reshape(12,)
+        #y_pred_3D[k] = y_pred_sc[k].reshape(12,)
         # Data for three-dimensional scattered points
         #ax.plot3D(x_Z1,y_Z2, z_Z3, 'gray');
         for i in range(len(x_Z1[k])):
@@ -388,21 +347,13 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     Year_Index_Cluster_km_ = pd.concat((Year_Index_Cluster_km_))
     
     # (ii) Year_Index_Cluster_sc
-    y_pred_sc1 = {}
-    for k in d_years.keys():
-        y_pred_sc1[k]=y_pred_sc[k].reshape(12,)
-    
-    # df1 = pd.DataFrame({'year':d_years.keys, 'dic':y_pred_sc1})
-    # Year_Index_Cluster_sc_= df1.dic.apply(pd.Series)
-    # Year_Index_Cluster_sc_.rename(columns={0:'NYA',1:'IXIC',2:'HSI',3:'000001.SS',4 :'GSPTSE',5:'399001.SZ',
-    #                                     6:'GDAXI',7:'KS11', 8:'SSMI',9:'TWII',10:'N225',11:'N100'}, inplace=True) 
     Year_Index_Cluster_sc_ = []
     for k, v in Z_comp_spec_df.items():
         v['Año'] = int(k)
         Year_Index_Cluster_sc_.append(v)
     Year_Index_Cluster_sc_ = pd.concat((Year_Index_Cluster_sc_))
 
-    # (iii) Indicador Silhouette para Kmeans
+    # (iii) Indicador Silhouette
     sil_score = {}
     label = {}
     for k in d_years.keys():
@@ -411,73 +362,29 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     df2= pd.DataFrame({'year':d_years.keys, 'dic':sil_score})        
     Year_Index_Silhouette_= df2.dic.apply(pd.Series)
     Year_Index_Silhouette_.rename(columns={0:'Sil_score'}, inplace=True)
-
-    #print(Year_Index_Silhouette_)
-
     # (iv) Indicador Silhouette para Spectral Clustering
     sil_score_sc = {}
     label_sc = {}
     for k in d_years.keys():
-        label_sc[k] = y_pred_sc[k]
+        label_sc[k] = Z_comp_spec_df[k]['cluster']
         sil_score_sc[k] = silhouette_score(t_scale_df[k], label_sc[k]).round(4)
     df2= pd.DataFrame({'year':d_years.keys, 'dic':sil_score_sc})        
     Year_Index_Silhouette_sc_= df2.dic.apply(pd.Series)
     Year_Index_Silhouette_sc_.rename(columns={0:'Sil_score'}, inplace=True)
-    
-    #print(Year_Index_Silhouette_sc_)
-    
+    route = './'
+    file_name='Year_Index_Silhouette_sc_.csv'
+    Year_Index_Silhouette_sc_.to_csv(route + file_name)
+    s3_client.upload_file(route + file_name, bucket, 'refined/clustering/{}'.format(file_name))
     # Guardar los archivos en S3
     for k in range(2000,2021):
         k_year = str(k)
-        
-        route = './'
-        file_name = 'R2_pd'+k_year+'.csv'
-        R2_pd[k] = pd.DataFrame(R2_pd[k])
-        R2_pd[k].to_csv(route + file_name)
-        s3_client.upload_file(route + file_name, bucket, 'refined/clustering/R2_pd/{}'.format(file_name))
-        
-        route = './'
-        file_name = 'd_years'+k_year+'.csv'
+        file_name = 'd_years '+k_year+'.csv'
         d_years[k].to_csv(route + file_name)
         s3_client.upload_file(route + file_name, bucket, 'refined/clustering/d_years/{}'.format(file_name))
         
-        route = './'
-        file_name = 't_scale_df'+ k_year+'.csv'
+        file_name = 't_scale_df '+ k_year+'.csv'
         t_scale_df[k].to_csv(route + file_name)
         s3_client.upload_file(route + file_name, bucket, 'refined/clustering/t_scale/{}'.format(file_name))
-        
-        route = './'
-        file_name = k_year+'_C'+'.csv'
-        C[k] = pd.DataFrame(C[k])
-        C[k].to_csv(route + file_name)
-        s3_client.upload_file(route + file_name, bucket, 'refined/clustering/Cov_eigen_val_vec/{}'.format(file_name))
-        
-        route = './'
-        file_name = k_year+'_W'+'.csv'
-        W[k] = pd.DataFrame(W[k])
-        W[k].to_csv(route + file_name)
-        s3_client.upload_file(route + file_name, bucket, 'refined/clustering/Cov_eigen_val_vec/{}'.format(file_name))
-        
-        route = './'
-        file_name = k_year+'_V'+'.csv'
-        V[k] = pd.DataFrame(V[k])
-        V[k].to_csv(route + file_name)
-        s3_client.upload_file(route + file_name, bucket, 'refined/clustering/Cov_eigen_val_vec/{}'.format(file_name))
-        
-        #route = './'
-        #file_name = k_year+'_Dep_global'+'.csv'
-        #Dep_global[k] = pd.DataFrame(Dep_global[k])
-        #Dep_global[k].to_csv(route + file_name)
-        #s3_client.upload_file(route + file_name, bucket, 'refined/clustering/Corr_Dep_Global/{}'.format(file_name))
-        
-        route = './'
-        file_name = k_year+'_Corr_global'+'.csv'
-        #Corr_global[k] = pd.DataFrame(Corr_global[k])
-        Corr_global[k].to_csv(route + file_name)
-        s3_client.upload_file(route + file_name, bucket, 'refined/clustering/Corr_Dep_Global/{}'.format(file_name))
-        
-        
-    
     route = './'
     file_name = 'Year_Index_Cluster_km_.csv'
     Year_Index_Cluster_km_.to_csv(route + file_name)
@@ -489,12 +396,8 @@ def Stats_basic_Clust(aws_access_key_id, aws_secret_access_key, aws_session_toke
     
     file_name = 'Year_Index_Silhouette_.csv'
     Year_Index_Silhouette_.to_csv(route + file_name)
-    s3_client.upload_file(route + file_name, bucket, 'refined/clustering/{}'.format(file_name))   
-    
-    file_name = 'Year_Index_Silhouette_sc_.csv'
-    Year_Index_Silhouette_sc_.to_csv(route + file_name)
-    s3_client.upload_file(route + file_name, bucket, 'refined/clustering/{}'.format(file_name))   
-    
+    s3_client.upload_file(route + file_name, bucket, 'refined/clustering/{}'.format(file_name)) 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='List the three keys')
     parser.add_argument(
